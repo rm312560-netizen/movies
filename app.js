@@ -1,5 +1,5 @@
 // 電影指南手機版：從轉接站下載電腦版整理好的資料包（推薦、時刻表、影城、票價、票房、影評），存在手機裡離線也能看
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastT;
@@ -19,9 +19,9 @@ const S = (() => { try { return JSON.parse(localStorage.getItem('mg') || '{}'); 
 const saveS = () => { try { localStorage.setItem('mg', JSON.stringify(S)); } catch {} };
 S.pending ||= {};
 // 個人資料：每筆有修改時間 at，合併時以較新的為準（電腦版 userdoc.js 同一套規則）
-const SECTIONS = ['favs', 'watched', 'theaters'];
-const emptyDoc = () => ({ favs: {}, watched: {}, theaters: {} });
-S.doc ||= emptyDoc(); S.urev ||= 0;
+const SECTIONS = ['favs', 'watched', 'theaters', 'people'];
+const emptyDoc = () => ({ favs: {}, watched: {}, theaters: {}, people: {} });
+S.doc ||= emptyDoc(); S.doc.people ||= {}; S.urev ||= 0;
 if (Array.isArray(S.favs)) { for (const id of S.favs) S.doc.favs[id] ||= { on: 1, at: Date.now() }; delete S.favs; }   // 舊版的收藏搬過來
 function mergeDoc(a, b) {
   const out = emptyDoc();
@@ -78,7 +78,7 @@ async function sync(force = false) {
       const snap = await api('GET', '/movie');
       D = snap;
       await idbPut('snap', snap).catch(() => {});
-      for (const id of Object.keys(S.pending)) if (D.reviews[id]) delete S.pending[id];
+      for (const id of Object.keys(S.pending)) if (D.reviews[id] || (id.startsWith('recap:') && D.recaps?.[id.slice(6)])) delete S.pending[id];
       saveS();
       render();
       if (!$('sheet').hidden && cur) openMovie(cur, true);
@@ -89,7 +89,8 @@ async function sync(force = false) {
     else showEmpty(`無法下載資料：${e.message}`);
   } finally { syncing = false; }
 }
-function showEmpty(msg) { document.querySelectorAll('.view').forEach(v => { if (!v.hidden) v.innerHTML = `<div class="empty">${esc(msg)}</div>`; }); }
+// 沒有資料時的訊息另外顯示，不能蓋掉分頁本身的內容（時刻表、影城、票房分頁有固定的元素）
+function showEmpty(msg) { const e = $('emptyMsg'); e.textContent = msg; e.hidden = false; }
 
 // ---------- 配對 ----------
 $('suGo').addEventListener('click', async () => {
@@ -116,8 +117,9 @@ const img = (src, cls = '') => `<img ${cls ? `class="${cls}"` : ''} src="${esc(s
 const M = id => D?.movies[id] || null;
 const theaterMap = () => Object.fromEntries((D?.theaters || []).map(t => [t.id, t]));
 const inArea = t => !S.area || t.a === S.area;
-function badges(r = {}, rv) {
+function badges(r = {}, rv, p) {
   const o = [];
+  if (p && p.g + p.n + p.b >= 5) o.push(`<span class="b ptt">PTT 好${p.g} 負${p.b}</span>`);
   if (r.imdb != null) o.push(`<span class="b imdb">IMDb ${r.imdb}</span>`);
   if (r.rt != null) o.push(`<span class="b rt">🍅 ${r.rt}%</span>`);
   if (r.mc != null) o.push(`<span class="b mc">MC ${r.mc}</span>`);
@@ -143,10 +145,61 @@ document.addEventListener('click', e => {
   $('actSub').textContent = `${th.n || ''}${sl.v ? `（${sl.v}）` : ''}${M(sl.m)?.rt ? `・約 ${endTime(sl.t, M(sl.m).rt)} 散場` : ''}`;
   $('actIcs').href = ics;
   $('actBook').hidden = !th.book; if (th.book) $('actBook').href = th.book;
+  $('actShare').onclick = () => { $('actSheet').hidden = true; shareSlot(sl, th); };
   $('actWatched').onclick = () => { $('actSheet').hidden = true; openWatched(sl.m, { date: sl.d, theater: sl.th }); };
   $('actSheet').hidden = false;
 }, true);
 $('actSheet').addEventListener('click', e => { if (e.target === $('actSheet') || e.target.closest('#actCancel') || e.target.closest('a')) $('actSheet').hidden = true; });
+
+// ---------- 分享卡：海報＋場次畫成圖片，用 iPhone 的分享選單傳到 LINE ----------
+function loadImg(src) {
+  return new Promise(res => { if (!src || !/image\.tmdb\.org/.test(src)) return res(null); const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); i.src = src + (src.includes('?') ? '&' : '?') + 'cors=1'; });
+}
+function wrapText(ctx, text, x, y, maxW, lineH, maxLines = 3) {
+  let line = '', lines = 0;
+  for (const ch of String(text)) {
+    if (ctx.measureText(line + ch).width > maxW) { ctx.fillText(line, x, y); y += lineH; line = ch; if (++lines >= maxLines - 1) { ctx.fillText(line + '…', x, y); return y + lineH; } }
+    else line += ch;
+  }
+  if (line) { ctx.fillText(line, x, y); y += lineH; }
+  return y;
+}
+async function shareCard({ poster, title, en, lines, foot, kicker = '一起看電影？' }) {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'), font = '-apple-system,"PingFang TC",sans-serif';
+  x.fillStyle = '#0f1115'; x.fillRect(0, 0, W, H);
+  const img = await loadImg(poster);
+  if (img) {
+    x.globalAlpha = .25; x.drawImage(img, -200, -100, W + 400, (W + 400) * 1.5); x.globalAlpha = 1;
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(15,17,21,.3)'); g.addColorStop(.6, 'rgba(15,17,21,.95)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.drawImage(img, 80, 80, 400, 600);
+  }
+  let y = img ? 790 : 220;
+  x.fillStyle = '#f5b301'; x.font = `700 40px ${font}`; x.fillText(kicker, 80, y - 60);
+  x.fillStyle = '#eceef3'; x.font = `800 76px ${font}`; y = wrapText(x, title, 80, y + 10, W - 160, 90, 2);
+  if (en) { x.fillStyle = '#9aa1ae'; x.font = `400 36px ${font}`; y = wrapText(x, en, 80, y, W - 160, 46, 1); }
+  y += 30; x.font = `600 46px ${font}`;
+  for (const [i, l] of lines.entries()) { x.fillStyle = i === 0 ? '#f5b301' : '#eceef3'; y = wrapText(x, l, 80, y, W - 160, 62, 2); }
+  x.fillStyle = '#9aa1ae'; x.font = `400 30px ${font}`; x.fillText(foot || '電影指南', 80, H - 70);
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+async function shareFile(blob, name, text) {
+  const file = new File([blob], name, { type: 'image/png' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    if (navigator.share) { await navigator.share({ text }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+async function shareSlot(sl, th) {
+  const m = M(sl.m) || {};
+  const when = `${dayLabel(sl.d)} ${fmtDate(sl.d)} ${sl.t}`;
+  const blob = await shareCard({ poster: m.p, title: m.t || sl.title, en: m.en,
+    lines: [when, `${th.n || ''}${sl.v ? `（${sl.v}）` : ''}`, m.rt ? `片長 ${m.rt} 分，約 ${endTime(sl.t, m.rt - 15)} 散場` : ''].filter(Boolean),
+    foot: [m.r?.imdb != null && `IMDb ${m.r.imdb}`, m.r?.rt != null && `爛番茄 ${m.r.rt}%`].filter(Boolean).join('　') || '電影指南' });
+  const text = `要不要一起看《${m.t || sl.title}》？\n${when}\n${th.n || ''}${sl.v ? `（${sl.v}）` : ''}\n${th.addr || ''}${th.book ? `\n訂票：${th.book}` : ''}`;
+  await shareFile(blob, `${m.t || 'movie'}.png`, text);
+}
 
 // ---------- 看過紀錄 ----------
 function openWatched(id, preset = {}) {
@@ -189,6 +242,12 @@ function reminders() {
     else if (n && m.rel && m.rel >= addDays(today, -10)) out.push({ id, k: 'shows', t: `《${m.t}》上映了，附近 3 天內有 ${n} 場` });
     if (special.size && n) out.push({ id, k: 'special', t: `《${m.t}》附近有 ${[...special].join('、')} 場次` });
     if (!n && m.s === 'old' && m.sp?.f?.length) out.push({ id, k: 'stream', t: `《${m.t}》可以在 ${m.sp.f.slice(0, 3).join('、')} 看了` });
+  }
+  const people = onKeys('people');
+  if (people.length) for (const [id, m] of Object.entries(D.movies)) {
+    if (isOn('watched', id) || !(m.s === 'next' || (m.s === 'now' && m.rel >= addDays(today, -7)))) continue;
+    const hit = people.filter(p => (m.dir || []).includes(p) || (m.cast || []).includes(p));
+    if (hit.length) out.push({ id, k: 'people', t: `你追蹤的 ${hit.join('、')} 有新片《${m.t}》${m.rel ? `（${m.rel > today ? `${m.rel.slice(5).replace('-', '/')} 上映` : '上映中'}）` : ''}` });
   }
   const hidden = S.hiddenRem || [];
   return out.filter(r => !hidden.includes(`${r.id}|${r.k}`));
@@ -235,6 +294,15 @@ document.addEventListener('change', e => {
   if (e.target.id === 'tnUntil') { S.tnUntil = e.target.value; saveS(); renderRec(); }
   if (e.target.id === 'tnAfter') { S.tnAfter = Number(e.target.value); saveS(); renderRec(); }
 });
+function digestHtml() {
+  const d = D.digest;
+  if (!d?.items?.length || !d.at || (Date.now() - new Date(d.at.replace(' ', 'T') + '+08:00')) > 8 * 86400e3) return '';
+  return `<div class="panel tn-box"><h2 style="margin:0 0 6px">本週新片懶人包</h2>
+    ${d.items.filter(i => M(i.id)).map(i => { const m = M(i.id); return `<div class="tn" data-movie="${esc(i.id)}">${img(thumb(m.p))}<div>
+      <div class="tt">${esc(m.t)}<span class="vd ${esc(i.verdict)}">${esc(i.verdict)}</span></div><div class="small">${esc(i.line)}</div>
+      <div class="muted small">${esc((m.rel || '').slice(5).replace('-', '/'))} 上映・適合：${esc(i.for)}</div></div></div>`; }).join('')}
+    <p class="muted small" style="margin:4px 0 0">AI 整理於 ${esc(d.at.slice(5, 16))}・每週四更新</p></div>`;
+}
 function picksHtml() {
   const p = D.picks, n = onKeys('watched').length;
   if (!p) return `<div class="panel tn-box"><h2 style="margin:0 0 6px">AI 為你推薦</h2><p class="muted small" style="margin:0">記錄 3 部以上看過的電影（電影頁按「✓ 看過了」並評分），AI 就會依你的口味推薦。目前 ${n} 部。${n >= 3 ? ' <a href="#" id="pkReq">請電腦版產生</a>' : ''}</p></div>`;
@@ -265,6 +333,7 @@ function go(t) {
 document.querySelectorAll('.tabbar button').forEach(b => b.addEventListener('click', () => go(b.dataset.tab)));
 function render() {
   if (!D) return;
+  $('emptyMsg').hidden = true;
   renderAreaSeg();
   ({ rec: renderRec, times: renderTimes, theaters: renderTheaters, box: renderBox, more: renderMore })[tab]();
 }
@@ -277,16 +346,17 @@ function renderRec() {
   $('v-rec').innerHTML = `${remindHtml()}
     <div class="hero" data-movie="${esc(topId)}" style="background-image:url('${esc(top.bd || top.p)}')"><div class="in">${img(top.p)}
       <div><div class="kicker">本週最推薦</div><h3>${esc(top.t)}</h3><div class="muted small">${esc(top.en || '')}</div>
-        ${badges(top.r, D.reviews[topId])}<div class="tags">${topTags.slice(0, 3).map(t => `<span class="tag hot">${esc(t)}</span>`).join('')}</div>
+        ${badges(top.r, D.reviews[topId], top.ptt)}<div class="tags">${topTags.slice(0, 3).map(t => `<span class="tag hot">${esc(t)}</span>`).join('')}</div>
         <div class="muted small" style="margin-top:4px">3 天內 ${topShows} 場・${topTh} 間影城</div></div></div></div>
     ${tonightHtml()}
     ${picksHtml()}
+    ${digestHtml()}
     <h2>推薦排行 <span class="muted small">口碑＋熱度</span></h2>
     <div class="rows">${list.map(([id, score, shows, , tags], i) => {
       const m = M(id);
       return `<div class="row" data-movie="${esc(id)}">${img(thumb(m.p), 'p')}<span class="rank">${i + 1}</span><span class="score">${score}</span>
         <div><div class="t">${esc(m.t)}</div><div class="meta">${[m.rt && `${m.rt} 分`, m.cert, (m.g || []).slice(0, 2).join('／'), `${shows} 場`].filter(Boolean).map(esc).join('・')}</div>
-          ${badges(m.r, D.reviews[id])}<div class="tags">${tags.slice(0, 2).map(t => `<span class="tag ${/票房|新片/.test(t) ? 'hot' : ''}">${esc(t)}</span>`).join('')}</div></div></div>`;
+          ${badges(m.r, D.reviews[id], m.ptt)}<div class="tags">${tags.slice(0, 2).map(t => `<span class="tag ${/票房|新片/.test(t) ? 'hot' : ''}">${esc(t)}</span>`).join('')}</div></div></div>`;
     }).join('')}</div>
     <p class="muted small">資料更新於 ${esc(D.generatedAt.slice(5, 16))}</p>`;
 }
@@ -333,6 +403,14 @@ $('tFavTh').addEventListener('change', e => { S.onlyFavTh = e.target.checked; sa
 
 // ---------- 影城 ----------
 let thOpen = null, thDate = null;
+function dealsHtml() {
+  const d = D.deals;
+  if (!d?.items?.length) return '';
+  return `<details class="panel deals-box" ${S.dealsOpen ? 'open' : ''}><summary><b>本月觀影優惠</b> <span class="muted small">${d.items.length} 項・${esc(d.at.slice(5, 10))}</span></summary>
+    ${d.items.map(x => `<div class="deal"><b>${esc(x.chain)}</b>　${esc(x.title)}<div class="small">${esc(x.detail)}</div><div class="muted small">到 ${esc(x.until || '—')}${x.url ? `・<a href="${esc(x.url)}" target="_blank" rel="noopener">來源</a>` : ''}</div></div>`).join('')}
+    <p class="muted small">AI 搜尋整理，以影城和銀行公告為準。</p></details>`;
+}
+document.addEventListener('toggle', e => { if (e.target.classList?.contains('deals-box')) { S.dealsOpen = e.target.open; saveS(); } }, true);
 function priceChange(t) {
   const a = t.pp?.regular, b = t.price?.regular;
   if (typeof a !== 'number' || typeof b !== 'number' || a === b) return '';
@@ -349,7 +427,7 @@ function renderTheaters() {
   const ths = D.theaters.filter(inArea).sort((a, b) => isOn('theaters', b.id) - isOn('theaters', a.id));
   const today = ymd(), counts = {};
   for (const [tid, mid] of D.shows[today] || []) (counts[tid] ||= new Set()).add(mid);
-  $('thList').innerHTML = `<div class="filters" style="margin-top:0"><button class="btn" id="mapBtn">${S.thMap ? '收起地圖' : '🗺 地圖'}</button><span class="muted small">按 ☆ 設為常去影城</span></div>${S.thMap ? '<div id="thMap"></div>' : ''}` + ths.map(t => `<div class="th" id="th-${t.id}">
+  $('thList').innerHTML = dealsHtml() + `<div class="filters" style="margin-top:0"><button class="btn" id="mapBtn">${S.thMap ? '收起地圖' : '🗺 地圖'}</button><span class="muted small">按 ☆ 設為常去影城</span></div>${S.thMap ? '<div id="thMap"></div>' : ''}` + ths.map(t => `<div class="th" id="th-${t.id}">
     <h3><span><button class="favth ${isOn('theaters', t.id) ? 'on' : ''}" data-favth="${t.id}">${isOn('theaters', t.id) ? '★' : '☆'}</button> ${esc(t.n)}</span><span class="muted small">${esc(D.areas.find(a => a.id === t.a)?.name || '')}</span></h3>${priceChange(t) ? `<div class="small">票價變動：${priceChange(t)}</div>` : ''}
     <div class="small muted">${esc(t.addr || '')}</div>
     <div class="links"><a href="${mapUrl(t)}" target="_blank" rel="noopener">📍 地圖</a>${t.tel ? `<a href="tel:${esc(t.tel.replace(/[^\d]/g, ''))}">☎ 電話</a>` : ''}${t.book ? `<a href="${esc(t.book)}" target="_blank" rel="noopener">訂票</a>` : ''}${t.web ? `<a href="${esc(t.web)}" target="_blank" rel="noopener">官網</a>` : ''}
@@ -459,7 +537,16 @@ function renderMore() {
       <div class="stats"><div class="stat"><span class="muted small">看了</span><b>${ws.length} 部</b></div><div class="stat"><span class="muted small">票錢</span><b>${spend.toLocaleString()}</b></div><div class="stat"><span class="muted small">平均</span><b>${avg}★</b></div></div>
       ${ws.map(w => { const m = M(w.id); return `<div class="wrow" data-edit="${esc(w.id)}">${img(thumb(m?.p))}<div><b>${esc(m?.t || w.title)}</b> <span class="stars">${starTxt(w.stars)}</span>
         <div class="muted small">${esc(w.date || '')}${w.theater ? `・${esc(thName(w.theater))}` : ''}${w.price ? `・${w.price} 元` : ''}</div>${w.note ? `<div class="small">${esc(w.note)}</div>` : ''}</div></div>`; }).join('') || '<p class="muted small">這一年還沒有紀錄。電影頁按「✓ 看過了」，或點場次時間選「記為看過」。</p>'}`;
+    el.insertAdjacentHTML('beforeend', yearHtml(year, ws, spend, avg) + `<h2>追蹤的導演／演員</h2>${onKeys('people').map(personBtn).join('') || '<p class="muted small">還沒有追蹤。在電影頁點導演或演員的名字就能追蹤，有新片會提醒你。</p>'}`);
     $('wYear').onchange = e => { S.wYear = e.target.value; saveS(); renderMore(); };
+    el.querySelectorAll('[data-person]').forEach(b => b.onclick = () => { setUser('people', b.dataset.person, { on: 0 }); toast(`已取消追蹤 ${b.dataset.person}`); renderMore(); });
+    if ($('yrReq')) $('yrReq').onclick = async e => { e.preventDefault(); try { await api('POST', '/movie/request', { type: 'report', id: year }); e.target.textContent = '已請電腦版產生，約 1～2 分鐘後重新打開'; } catch (err) { toast(err.message); } };
+    if ($('yrImg')) $('yrImg').onclick = async () => {
+      const best = ws.filter(w => w.stars).sort((a, b) => b.stars - a.stars)[0];
+      const blob = await shareCard({ poster: best ? M(best.id)?.p : null, title: `我的 ${year} 觀影回顧`, kicker: '年度回顧',
+        lines: [`看了 ${ws.length} 部電影`, `票錢 NT$ ${spend.toLocaleString()}・平均 ${avg} ★`, best ? `年度最愛：${M(best.id)?.t || best.title}` : ''].filter(Boolean), foot: '電影指南' });
+      await shareFile(blob, `${year}-觀影回顧.png`, `我的 ${year} 觀影回顧：看了 ${ws.length} 部電影！`);
+    };
     el.querySelectorAll('[data-edit]').forEach(r => r.onclick = () => openWatched(r.dataset.edit));
   } else {
     el.innerHTML = `<div class="panel set">
@@ -475,6 +562,28 @@ function renderMore() {
   }
 }
 $('moreSeg').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { more = b.dataset.m; renderMore(); } });
+
+function yearHtml(year, ws, spend, avg) {
+  if (!ws.length) return '';
+  const r = D.reports?.[year];
+  return `<h2>${year} 年度報告</h2>${r ? `<details class="panel"><summary>AI 年度觀影報告（${r.n} 部・${esc(String(r.at).slice(0, 10))}）</summary><div class="md">${md(r.c)}</div></details>` : ''}
+    <div class="acts" style="margin-top:8px"><a href="#" class="btn" id="yrReq">${r ? '重新產生' : '請電腦版產生'} AI 年度報告</a><button class="btn" id="yrImg">分享年度回顧圖</button></div>`;
+}
+const personBtn = n => `<button class="person ${isOn('people', n) ? 'on' : ''}" data-person="${esc(n)}">${isOn('people', n) ? '★ ' : ''}${esc(n)}</button>`;
+// 同一天最便宜的場次：中午前有早場價用早場價，否則全票；特殊廳不算；只算查過票價的影城
+function cheapest(date) {
+  const th = theaterMap(), out = [];
+  for (const [tid, mid, ver, ...times] of D.shows[date] || []) {
+    const p = th[tid]?.price;
+    if (mid !== cur || !th[tid] || !inArea(th[tid]) || !p?.regular || /IMAX|4DX|ScreenX|MX4D|Dolby|杜比|GOLD|VIP|3D/i.test(ver)) continue;
+    for (const t of times) {
+      if (isPast(date, t)) continue;
+      const early = t >= '05:00' && t < '12:00' && p.early;
+      out.push({ t, n: th[tid].n, price: early ? p.early : p.regular, early: !!early, conc: p.concession });
+    }
+  }
+  return out.sort((a, b) => a.price - b.price || a.t.localeCompare(b.t)).slice(0, 3);
+}
 
 // ---------- 電影介紹 ----------
 let cur = null, curDate = null;
@@ -493,6 +602,8 @@ function openMovie(id, keepScroll = false) {
     r.mc != null && rbox('Metacritic', `${r.mc}<small>/100</small>`),
     r.tmdb != null && rbox('TMDB', `${r.tmdb}<small>/10</small>`),
     rv?.s?.avg != null && rbox('YouTube 影評', `${rv.s.avg}<small>/10</small>`, `${rv.s.recommend}/${rv.s.count} 推薦`),
+    m.ptt && m.ptt.g + m.ptt.n + m.ptt.b > 0 && rbox('PTT', `${m.ptt.g}<small>好 </small>${m.ptt.b}<small>負</small>`, `普 ${m.ptt.n}`, m.ptt.u),
+    rv?.s?.pc && (rv.s.pc.yes || rv.s.pc.no) && rbox('片尾彩蛋', rv.s.pc.yes ? '🥚 有' : '沒有', rv.s.pc.yes ? (rv.s.pc.detail || `${rv.s.pc.yes} 支影評提到`).slice(0, 14) : ''),
   ].filter(Boolean);
   const fav = isOn('favs', id), w = watchedOf(id);
   $('sheetBody').innerHTML = `
@@ -507,16 +618,25 @@ function openMovie(id, keepScroll = false) {
       ${m.sp && (m.sp.f?.length || m.sp.r?.length) ? `<h2>串流平台（台灣）</h2><div class="prov">${m.sp.f.map(p => `<span class="f">${esc(p)}</span>`).join('')}${m.sp.r.map(p => `<span>租：${esc(p)}</span>`).join('')}</div>` : ''}
       ${w?.note ? `<h2>我的心得</h2><p class="small">${esc(w.note)}</p>` : ''}
       <h2>場次</h2><div id="mShows"></div>
+      ${m.ptt && m.ptt.g + m.ptt.n + m.ptt.b > 0 ? `<h2>PTT 電影版口碑</h2><div class="pttbar"><i style="flex:${m.ptt.g};background:#4a8ae0"></i><i style="flex:${m.ptt.n};background:#8a8f99"></i><i style="flex:${m.ptt.b};background:var(--bad)"></i></div>
+        <div class="small">好雷 ${m.ptt.g}・普雷 ${m.ptt.n}・負雷 ${m.ptt.b}　<a href="${esc(m.ptt.u)}" target="_blank" rel="noopener">看全部</a></div>
+        ${m.ptt.top.map(([t, u, , n]) => `<a class="pttpost" href="${esc(u)}" target="_blank" rel="noopener"><span class="muted">${esc(n || '0')}</span> ${esc(t)}</a>`).join('')}<p class="muted small">「雷」文可能透露劇情。</p>` : ''}
+      ${m.col ? `<h2>系列前作 <span class="muted small">${esc(m.col.n)}${m.col.total > 6 ? `・共 ${m.col.total} 部` : ''}</span></h2><div class="small">${m.col.p.map(([t, y]) => `${esc(t)}（${esc(y)}）`).join('、')}</div>
+        ${D.recaps[id] ? `<details class="panel" style="margin-top:8px"><summary>前作懶人包（含前作劇透）</summary><div class="md">${md(D.recaps[id].c)}</div></details>`
+          : S.pending[`recap:${id}`] ? '<p class="muted small">已請電腦版整理前作懶人包，1～2 分鐘後重新打開。</p>' : '<p><button class="btn" id="recapReq">請電腦版整理前作懶人包</button></p>'}` : ''}
       <h2>YouTube 影評 AI 整理</h2><div class="aibox" id="aiBox"></div>
       <h2>劇情簡介</h2><div class="story">${esc(m.st || '（沒有簡介）')}</div>
-      ${m.dir?.length ? `<p class="small"><span class="muted">導演</span>　${m.dir.map(esc).join('、')}</p>` : ''}
-      ${m.cast?.length ? `<p class="small"><span class="muted">演員</span>　${m.cast.map(esc).join('、')}</p>` : ''}
+      ${m.dir?.length ? `<p class="small"><span class="muted">導演</span>　${m.dir.map(personBtn).join('')}</p>` : ''}
+      ${m.cast?.length ? `<p class="small"><span class="muted">演員</span>　${m.cast.map(personBtn).join('')}</p>` : ''}
+      ${m.dir?.length || m.cast?.length ? '<p class="muted small">點名字可以追蹤，有新片會提醒你。</p>' : ''}
       ${m.aw ? `<p class="small"><span class="muted">得獎</span>　${esc(m.aw)}</p>` : ''}
     </div>`;
   if (m.tr?.length) playTrailer(m.tr[0]);
   $('sheetBody').querySelectorAll('[data-tr]').forEach(b => b.onclick = () => { $('sheetBody').querySelectorAll('[data-tr]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); playTrailer(b.dataset.tr); });
   $('favBtn').onclick = () => { const on = !isOn('favs', id); setUser('favs', id, { on: on ? 1 : 0 }); $('favBtn').textContent = on ? '★ 已收藏' : '☆ 收藏'; };
   $('watchBtn').onclick = () => openWatched(id);
+  $('sheetBody').querySelectorAll('[data-person]').forEach(b => b.onclick = () => { const on = !isOn('people', b.dataset.person); setUser('people', b.dataset.person, { on: on ? 1 : 0 }); b.classList.toggle('on', on); b.textContent = (on ? '★ ' : '') + b.dataset.person; toast(on ? `已追蹤 ${b.dataset.person}` : '已取消追蹤'); });
+  if ($('recapReq')) $('recapReq').onclick = async () => { try { await api('POST', '/movie/request', { type: 'recap', id }); S.pending[`recap:${id}`] = 1; saveS(); openMovie(id, true); } catch (e) { toast(e.message); } };
   renderShows();
   renderReview();
   $('sheet').scrollTop = keepScroll ? sc : 0;
@@ -538,7 +658,9 @@ function renderShows() {
     if (!by.has(tid)) by.set(tid, []);
     by.get(tid).push({ ver, times });
   }
+  const ch = cheapest(curDate);
   box.innerHTML = `<div class="chips scroll" style="margin-bottom:8px">${dates.map(d => `<button class="chip" data-md="${d}" aria-pressed="${d === curDate}">${dayLabel(d)}</button>`).join('')}</div>
+    ${ch.length ? `<div class="cheap">💰 最便宜：${ch.map(c => `<b>${c.price}</b> ${esc(c.n)} ${c.t}${c.early ? '早場' : ''}`).join('、')}${ch[0].conc ? `<div class="muted small">學生／優待約 ${ch[0].conc} 元起</div>` : ''}</div>` : ''}
     ${[...by.entries()].sort((a, b) => isOn('theaters', b[0]) - isOn('theaters', a[0])).map(([tid, vs]) => { const t = th[tid]; return `<div class="showth ${isOn('theaters', tid) ? 'fav' : ''}"><div class="name"><span>${isOn('theaters', tid) ? '★ ' : ''}${esc(t.n)}</span><span class="small">${t.book ? `<a href="${esc(t.book)}" target="_blank" rel="noopener">訂票</a>　` : ''}<a href="${mapUrl(t)}" target="_blank" rel="noopener">地圖</a></span></div>
       ${vs.map(v => `${v.ver ? `<div style="margin-top:5px"><span class="ver" style="margin:0">${esc(v.ver)}</span></div>` : ''}<div class="times">${v.times.map(x => timeBtn({ m: cur, title: M(cur).t, d: curDate, t: x, th: tid, v: v.ver, rt: M(cur).rt }, isPast(curDate, x))).join('')}</div>`).join('')}</div>`; }).join('')}
     <p class="muted small">點場次時間可以加入行事曆、訂票或記為看過。</p>`;

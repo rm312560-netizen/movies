@@ -189,3 +189,19 @@ button.time { border: 0; color: var(--fg); cursor: pointer; }
 .prov { display: flex; flex-wrap: wrap; gap: 6px; }
 .prov span { background: var(--panel); border-radius: 6px; padding: 2px 9px; font-size: .85rem; }
 .prov span.f { background: #1f3a2e; color: #9fe3bf; }
+
+/* 1.2：PTT、彩蛋、追蹤、最便宜、優惠、懶人包 */
+.b.ptt { background: #2d5b9a; color: #fff; }
+.pttbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin: 4px 0 6px; }
+.pttpost { display: block; color: var(--fg); font-size: .85rem; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.person { border: 1px solid var(--line); background: var(--panel2); border-radius: 999px; padding: 2px 10px; font-size: .85rem; margin: 2px 4px 2px 0; }
+.person.on { border-color: var(--accent); color: var(--accent); }
+.cheap { background: #1f3a2e; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; font-size: .86rem; }
+.cheap b { color: #9fe3bf; }
+.deals-box { margin-bottom: 12px; }
+.deals-box summary { cursor: pointer; }
+.deal { border-top: 1px solid var(--line); padding: 8px 0; font-size: .88rem; }
+.deal b { color: var(--accent); }
+.vd { font-size: .7rem; font-weight: 700; border-radius: 5px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+.vd.戲院看 { background: var(--accent); color: var(--accent-fg); } .vd.等串流 { background: #1f3a2e; color: #9fe3bf; } .vd.可跳過 { background: var(--line); color: var(--muted); }
+details.panel summary { cursor: pointer; color: var(--accent); }
