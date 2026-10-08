@@ -151,3 +151,41 @@ select, input { background: var(--panel2); border: 1px solid var(--line); border
 .setup h2 { margin: 0; }
 .setup label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
 .setup input { width: 100%; }
+
+/* 1.1：提醒、今晚看什麼、AI 推薦、場次選單、看過紀錄、常去影城、地圖、串流平台 */
+.remind { display: grid; gap: 6px; margin-bottom: 12px; }
+.remind .it { background: #2a2310; border: 1px solid #5c4a12; color: #f3dc9b; border-radius: 10px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; font-size: .88rem; }
+.remind .x { border: 0; background: none; color: var(--muted); padding: 0 4px; }
+.tn-box { margin-top: 14px; }
+.tn { display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.tn:first-of-type { border-top: 0; }
+.tn img { width: 52px; height: 76px; object-fit: cover; border-radius: 6px; background: var(--panel2); }
+.tn .tt { font-weight: 600; font-size: .92rem; }
+button.time { border: 0; color: var(--fg); cursor: pointer; }
+.tn button.time { background: var(--accent); color: var(--accent-fg); font-weight: 800; font-size: 1rem; }
+.actsheet { position: fixed; inset: 0; z-index: 85; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; }
+.actsheet .box { width: 100%; background: var(--panel); border-radius: 16px 16px 0 0; padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 14px); display: grid; gap: 4px; max-width: 640px; margin: 0 auto; }
+.actsheet .hd { padding: 4px 6px 10px; }
+.actsheet a, .actsheet .box > button { display: block; text-align: left; border: 0; background: var(--panel2); color: var(--fg); border-radius: 10px; padding: 12px 14px; font-size: 1rem; }
+.actsheet .cancel { text-align: center !important; color: var(--muted) !important; margin-top: 4px; }
+.actsheet .form { gap: 10px; }
+.actsheet label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.actsheet input, .actsheet select, .actsheet textarea { width: 100%; }
+.actsheet .btns { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; }
+.starpick button { border: 0; background: none; font-size: 1.9rem; color: var(--line); padding: 0 3px; }
+.starpick button.on { color: var(--accent); }
+.stars { color: var(--accent); font-size: .85rem; }
+.favth { border: 0; background: none; color: var(--muted); font-size: 1.1rem; padding: 0; }
+.favth.on { color: var(--accent); }
+.showth.fav { border: 1px solid #5c4a12; }
+.pchg { font-size: .75rem; font-weight: 700; margin-left: 4px; }
+#thMap { height: 300px; border-radius: 12px; margin-bottom: 12px; background: var(--panel); }
+.leaflet-popup-content { font-size: .85rem; color: #222; line-height: 1.5; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.stat { background: var(--panel); border-radius: 10px; padding: 8px 10px; }
+.stat b { display: block; font-size: 1.15rem; }
+.wrow { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; background: var(--panel); border-radius: 10px; padding: 6px 10px; margin-bottom: 6px; }
+.wrow img { width: 44px; height: 64px; object-fit: cover; border-radius: 5px; background: var(--panel2); }
+.prov { display: flex; flex-wrap: wrap; gap: 6px; }
+.prov span { background: var(--panel); border-radius: 6px; padding: 2px 9px; font-size: .85rem; }
+.prov span.f { background: #1f3a2e; color: #9fe3bf; }

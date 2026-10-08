@@ -32,6 +32,7 @@
       <label>從 <input type="time" id="tFrom"></label>
       <button class="btn" id="tNow">現在</button>
       <select id="tMovie"></select>
+      <label class="small"><input type="checkbox" id="tFavTh"> 只看常去影城</label>
     </div>
     <div id="tList"></div>
   </section>
@@ -53,7 +54,7 @@
     <div class="seg wide" id="moreSeg">
       <button data-m="now" aria-pressed="true">上映中</button>
       <button data-m="next" aria-pressed="false">即將上映</button>
-      <button data-m="fav" aria-pressed="false">收藏</button>
+      <button data-m="fav" aria-pressed="false">我的</button>
       <button data-m="set" aria-pressed="false">設定</button>
     </div>
     <div id="moreBody"></div>
@@ -85,6 +86,26 @@
     <p class="muted small" id="suMsg"></p>
   </div>
 </div>
+
+<!-- 場次選單 -->
+<div id="actSheet" class="actsheet" hidden><div class="box">
+  <div class="hd"><b id="actTitle"></b><div class="muted small" id="actSub"></div></div>
+  <a id="actIcs" href="#" target="_blank" rel="noopener">📅 加入行事曆（開演前 1 小時提醒）</a>
+  <a id="actBook" href="#" target="_blank" rel="noopener">🎟 網路訂票</a>
+  <button id="actWatched">✓ 記為看過</button>
+  <button id="actCancel" class="cancel">取消</button>
+</div></div>
+
+<!-- 看過紀錄 -->
+<div id="wDlg" class="actsheet" hidden><div class="box form">
+  <b id="wTitle"></b>
+  <label>日期<input type="date" id="wDate"></label>
+  <div><div class="muted small">我的評分</div><div class="starpick" id="wStars"><button data-n="1">★</button><button data-n="2">★</button><button data-n="3">★</button><button data-n="4">★</button><button data-n="5">★</button></div></div>
+  <label>影城<select id="wTh"></select></label>
+  <label>票價（元）<input type="number" id="wPrice" inputmode="numeric"></label>
+  <label>心得<textarea id="wNote" rows="3" placeholder="一兩句就好，AI 推薦會參考"></textarea></label>
+  <div class="btns"><button class="btn" id="wDel">刪除</button><span></span><button class="btn" id="wCancel">取消</button><button class="primary" id="wSave">儲存</button></div>
+</div></div>
 
 <div id="toast" class="toast" hidden></div>
 <div id="loading" class="loading">載入中…</div>
