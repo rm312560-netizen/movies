@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>電影指南</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="電影指南">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>電影指南</h1>
+  <div class="seg" id="areaSeg"></div>
+</header>
+<div id="offline" class="offline" hidden></div>
+
+<main>
+  <!-- 推薦 -->
+  <section id="v-rec" class="view"></section>
+
+  <!-- 時刻表 -->
+  <section id="v-times" class="view" hidden>
+    <div class="chips scroll" id="tDates"></div>
+    <div class="filters">
+      <label>從 <input type="time" id="tFrom"></label>
+      <button class="btn" id="tNow">現在</button>
+      <select id="tMovie"></select>
+    </div>
+    <div id="tList"></div>
+  </section>
+
+  <!-- 影城 -->
+  <section id="v-theaters" class="view" hidden>
+    <div id="thList"></div>
+  </section>
+
+  <!-- 票房 -->
+  <section id="v-box" class="view" hidden>
+    <div class="seg wide" id="boKind"><button data-k="tw" aria-pressed="true">台北週末</button><button data-k="us" aria-pressed="false">全美週末</button></div>
+    <p class="muted small" id="boPeriod"></p>
+    <div id="boList"></div>
+  </section>
+
+  <!-- 更多 -->
+  <section id="v-more" class="view" hidden>
+    <div class="seg wide" id="moreSeg">
+      <button data-m="now" aria-pressed="true">上映中</button>
+      <button data-m="next" aria-pressed="false">即將上映</button>
+      <button data-m="fav" aria-pressed="false">收藏</button>
+      <button data-m="set" aria-pressed="false">設定</button>
+    </div>
+    <div id="moreBody"></div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-tab="rec" aria-current="page"><span class="ic">★</span><span>推薦</span></button>
+  <button data-tab="times"><span class="ic">◷</span><span>時刻</span></button>
+  <button data-tab="theaters"><span class="ic">⌂</span><span>影城</span></button>
+  <button data-tab="box"><span class="ic">▤</span><span>票房</span></button>
+  <button data-tab="more"><span class="ic">≡</span><span>更多</span></button>
+</nav>
+
+<!-- 電影介紹（整頁覆蓋） -->
+<div id="sheet" class="sheet" hidden>
+  <button class="back" id="sheetBack">‹ 返回</button>
+  <div id="sheetBody"></div>
+</div>
+
+<!-- 第一次使用：配對 -->
+<div id="setup" class="setup" hidden>
+  <div class="panel">
+    <h2>連結電腦版</h2>
+    <p class="muted small">在電腦版「電影指南」→ 設定 →「手機版」按「產生配對碼」，把畫面上的轉接站網址和 8 碼配對碼輸入下面。</p>
+    <label>轉接站網址<input id="suUrl" placeholder="https://xxxx.workers.dev" autocomplete="off" autocapitalize="off" inputmode="url"></label>
+    <label>配對碼<input id="suCode" placeholder="8 碼英數字" autocomplete="off" autocapitalize="characters" maxlength="8"></label>
+    <button class="primary" id="suGo">連結</button>
+    <p class="muted small" id="suMsg"></p>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<div id="loading" class="loading">載入中…</div>
+
+<script src="app.js"></script>
+</body>
+</html>
