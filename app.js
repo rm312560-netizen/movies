@@ -1,5 +1,5 @@
 // 電影指南手機版：從轉接站下載電腦版整理好的資料包（推薦、時刻表、影城、票價、票房、影評），存在手機裡離線也能看
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastT;
@@ -19,16 +19,18 @@ const S = (() => { try { return JSON.parse(localStorage.getItem('mg') || '{}'); 
 const saveS = () => { try { localStorage.setItem('mg', JSON.stringify(S)); } catch {} };
 S.pending ||= {};
 // ---------- 分享版（朋友用）：網址帶 ?s=分享碼&w=轉接站，打開就能用，只能看電影資料 ----------
-function readShareLink(href) {
+function readShareLink(href, fromAddress = false) {
   try {
     const u = new URL(href, location.href), key = u.searchParams.get('s'), host = u.searchParams.get('w');
     if (!/^[a-z0-9]{8,20}$/.test(key || '') || !/^[\w.-]+\.[a-z]{2,}$/i.test(host || '')) return false;
     if (S.token) return false;                      // 自己（擁有者）已經配對過，不要被分享連結蓋掉
+    // 主畫面圖示每次打開都帶著當初的網址：同一個碼套用過就不再套用，之後手動貼的新連結才不會被舊碼蓋回去
+    if (fromAddress) { if (S.addrKey === key) return false; S.addrKey = key; }
     S.guest = key; S.apiBase = `https://${host}`; saveS();
     return true;
   } catch { return false; }
 }
-readShareLink(location.href);
+readShareLink(location.href, true);
 const GUEST = () => !!S.guest && !S.token;
 const authHeader = () => GUEST() ? `Guest ${S.guest}` : `Bearer ${S.token}`;
 const linked = () => !!(S.token || S.guest);
@@ -77,7 +79,8 @@ async function api(method, p, body) {
   const r = await fetch(S.apiBase + p, { method, headers: { Authorization: authHeader(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) {
-    if (GUEST()) { S.guest = ''; saveS(); showSetup(); throw new Error(j.error || '分享連結已失效'); }
+    // 分享版：不要刪掉分享碼（剛建立的碼偶爾會暫時驗證失敗），手機上已有的資料照常顯示；真的被撤銷就貼新的連結
+    if (GUEST()) { if (!D) showSetup(); throw new Error(j.error || '分享連結已失效'); }
     S.token = ''; saveS(); showSetup(); throw new Error('通行碼失效，請重新配對');
   }
   if (!r.ok) throw new Error(j.error || `轉接站回應 ${r.status}`);
