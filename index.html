@@ -100,6 +100,9 @@
   <a id="actIcs" href="#" target="_blank" rel="noopener">📅 加入行事曆（開演前 1 小時提醒）</a>
   <a id="actBook" href="#" target="_blank" rel="noopener">🎟 網路訂票</a>
   <button id="actShare">📤 分享給朋友（LINE 等）</button>
+  <button id="actPlan">📌 我要去看</button>
+  <button id="actPoll">👥 揪團（加入投票選項）</button>
+  <button id="actFood">🍜 附近吃什麼</button>
   <button id="actWatched">✓ 記為看過</button>
   <button id="actCancel" class="cancel">取消</button>
 </div></div>
@@ -114,6 +117,10 @@
   <label>心得<textarea id="wNote" rows="3" placeholder="一兩句就好，AI 推薦會參考"></textarea></label>
   <div class="btns"><button class="btn" id="wDel">刪除</button><span></span><button class="btn" id="wCancel">取消</button><button class="primary" id="wSave">儲存</button></div>
 </div></div>
+
+<!-- 揪團投票、附近餐廳 -->
+<div id="dlg2" class="actsheet" hidden><div class="box" id="dlg2Box"></div></div>
+<div id="pollBar" class="pollbar" hidden></div>
 
 <div id="toast" class="toast" hidden></div>
 <div id="loading" class="loading">載入中…</div>

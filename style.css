@@ -207,3 +207,28 @@ button.time { border: 0; color: var(--fg); cursor: pointer; }
 .vd { font-size: .7rem; font-weight: 700; border-radius: 5px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
 .vd.戲院看 { background: var(--accent); color: var(--accent-fg); } .vd.等串流 { background: #1f3a2e; color: #9fe3bf; } .vd.可跳過 { background: var(--line); color: var(--muted); }
 details.panel summary { cursor: pointer; color: var(--accent); }
+
+/* 1.4 */
+.halls { width: 100%; border-collapse: collapse; font-size: .85rem; margin: 4px 0; }
+.halls th, .halls td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.halls th { color: var(--muted); font-weight: 500; }
+.guide { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 6px; }
+.guide > div { background: var(--panel); border-radius: 8px; padding: 6px; display: grid; justify-items: center; gap: 1px; }
+.guide b { letter-spacing: 1px; font-size: .8rem; } .guide .lv0 { color: var(--muted); } .guide .lv1 { color: var(--good); } .guide .lv2 { color: var(--accent); } .guide .lv3 { color: var(--bad); }
+.trend { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--panel); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; }
+.trend > div { display: grid; } .trend b { font-size: 1.05rem; }
+.frate { background: var(--panel); border-radius: 10px; padding: 7px 12px; margin-bottom: 6px; }
+.frform { display: grid; gap: 8px; margin-top: 8px; }
+.frform input { width: 100%; }
+.starpick button.on { color: var(--accent); }
+.pollbar { position: fixed; left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 70; background: var(--panel2); border: 1px solid var(--accent); border-radius: 12px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; font-size: .85rem; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.pollbar span { flex: 1; }
+.polls { display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; margin: 8px 0; }
+.pslot { display: flex; gap: 10px; align-items: flex-start; background: var(--panel); border-radius: 10px; padding: 8px 10px; }
+.pslot span { flex: 1; } .pslot input { margin-top: 4px; width: 20px; height: 20px; }
+.pslot.best { outline: 2px solid var(--accent); }
+.foodlist { max-height: 55vh; overflow-y: auto; display: grid; gap: 4px; margin-top: 6px; }
+.food { display: grid; background: var(--panel); border-radius: 10px; padding: 7px 12px; color: var(--fg); text-decoration: none; }
+.food .ok { color: var(--good); margin-right: 6px; } .food .no { color: var(--muted); margin-right: 6px; text-decoration: line-through; }
+#dlg2Box { max-height: 88vh; overflow-y: auto; }
+.spark { flex: none; }
