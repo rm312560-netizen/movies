@@ -1,5 +1,5 @@
 // 電影指南手機版：從轉接站下載電腦版整理好的資料包（推薦、時刻表、影城、票價、票房、影評），存在手機裡離線也能看
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastT;
@@ -81,7 +81,7 @@ async function api(method, p, body) {
   if (r.status === 401) {
     // 分享版：不要刪掉分享碼（剛建立的碼偶爾會暫時驗證失敗），手機上已有的資料照常顯示；真的被撤銷就貼新的連結
     if (GUEST()) { if (!D) showSetup(); throw new Error(j.error || '分享連結已失效'); }
-    S.token = ''; saveS(); showSetup(); throw new Error('通行碼失效，請重新配對');
+    S.token = ''; S.wantOwner = 1; saveS(); showSetup('通行碼失效，請在電腦版重新產生配對碼'); throw new Error('通行碼失效，請重新配對');
   }
   if (!r.ok) throw new Error(j.error || `轉接站回應 ${r.status}`);
   return j;
@@ -116,16 +116,29 @@ async function sync(force = false) {
 function showEmpty(msg) { const e = $('emptyMsg'); e.textContent = msg; e.hidden = false; }
 
 // ---------- 配對 ----------
-function showSetup() { $('setup').hidden = false; $('suOwner').hidden = !!S.wantOwner ? false : true; }
+// 擁有者（以前用配對碼連過、或按了重新配對）直接顯示配對碼欄位；朋友只看到「貼上分享連結」
+function showSetup(msg) {
+  const owner = !!S.wantOwner || (!!S.apiBase && !S.guest);
+  $('setup').hidden = false; $('suOwner').hidden = !owner; $('suOwnerBtn').hidden = owner;
+  if (owner && S.apiBase && !$('suUrl').value) $('suUrl').value = S.apiBase;
+  $('suMsg').textContent = msg || '';
+}
+function openOwnerForm(code, msg) {
+  S.wantOwner = 1; saveS(); showSetup(msg);
+  if (code) $('suCode').value = code.toUpperCase();
+  ($('suUrl').value ? $('suCode') : $('suUrl')).focus();
+}
 $('suPaste').addEventListener('click', async () => {
   let t = $('suLink').value.trim();
   if (!t) { try { t = await navigator.clipboard.readText(); $('suLink').value = t; } catch {} }
   if (!t) return void ($('suMsg').textContent = '請把朋友傳給你的分享連結貼在上面');
-  if (!readShareLink(t)) return void ($('suMsg').textContent = '這不是有效的分享連結');
+  // 貼的是 8 碼配對碼：自動轉到配對碼欄位
+  if (/^[A-Za-z0-9]{8}$/.test(t)) { $('suLink').value = ''; return openOwnerForm(t, '這是配對碼，請確認轉接站網址後按「連結」'); }
+  if (!readShareLink(t)) return void ($('suMsg').textContent = '這不是有效的分享連結（擁有者請按下方「我是擁有者，用配對碼連結」）');
   document.documentElement.classList.add('guest');
   $('setup').hidden = true; toast('已開啟分享版'); sync(true);
 });
-$('suOwnerBtn').addEventListener('click', () => { $('suOwner').hidden = false; $('suOwnerBtn').hidden = true; });
+$('suOwnerBtn').addEventListener('click', () => openOwnerForm());
 $('suGo').addEventListener('click', async () => {
   const url = $('suUrl').value.trim().replace(/\/+$/, ''), code = $('suCode').value.trim().toUpperCase();
   if (!/^https:\/\//.test(url)) return void ($('suMsg').textContent = '轉接站網址要以 https:// 開頭');
@@ -135,7 +148,7 @@ $('suGo').addEventListener('click', async () => {
     const r = await fetch(`${url}/pair/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || `回應 ${r.status}`);
-    S.apiBase = url; S.token = j.token; S.guest = ''; saveS();
+    S.apiBase = url; S.token = j.token; S.guest = ''; S.wantOwner = 0; saveS();
     document.documentElement.classList.remove('guest');
     $('setup').hidden = true; $('suCode').value = ''; $('suMsg').textContent = '';
     toast('已連結電腦版');
