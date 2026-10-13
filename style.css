@@ -148,6 +148,8 @@ select, input { background: var(--panel2); border: 1px solid var(--line); border
 .set .r { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .setup { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: grid; place-items: center; padding: 20px; }
 .setup .panel { width: 100%; max-width: 420px; display: grid; gap: 12px; }
+.setup [hidden] { display: none !important; }
+#shareBox .r { gap: 8px; }
 .setup h2 { margin: 0; }
 .setup label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
 .setup input { width: 100%; }

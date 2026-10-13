@@ -79,12 +79,18 @@
 <!-- 第一次使用：配對 -->
 <div id="setup" class="setup" hidden>
   <div class="panel">
-    <h2>連結電腦版</h2>
-    <p class="muted small">在電腦版「電影指南」→ 設定 →「手機版」按「產生配對碼」，把畫面上的轉接站網址和 8 碼配對碼輸入下面。</p>
-    <label>轉接站網址<input id="suUrl" placeholder="https://xxxx.workers.dev" autocomplete="off" autocapitalize="off" inputmode="url"></label>
-    <label>配對碼<input id="suCode" placeholder="8 碼英數字" autocomplete="off" autocapitalize="characters" maxlength="8"></label>
-    <button class="primary" id="suGo">連結</button>
+    <h2>電影指南</h2>
+    <p class="muted small">請用朋友傳給你的「分享連結」打開。如果你是從主畫面打開的，把分享連結貼在下面（或直接按按鈕，會讀剪貼簿）。</p>
+    <input id="suLink" placeholder="貼上分享連結" autocomplete="off" autocapitalize="off" inputmode="url">
+    <button class="primary" id="suPaste">貼上分享連結</button>
     <p class="muted small" id="suMsg"></p>
+    <button class="btn" id="suOwnerBtn" style="justify-self:start">我是擁有者，用配對碼連結</button>
+    <div id="suOwner" hidden style="display:grid;gap:12px">
+      <p class="muted small">在電腦版「電影指南」→ 設定 →「手機版」按「產生配對碼」，把畫面上的轉接站網址和 8 碼配對碼輸入下面。</p>
+      <label>轉接站網址<input id="suUrl" placeholder="https://xxxx.workers.dev" autocomplete="off" autocapitalize="off" inputmode="url"></label>
+      <label>配對碼<input id="suCode" placeholder="8 碼英數字" autocomplete="off" autocapitalize="characters" maxlength="8"></label>
+      <button class="primary" id="suGo">連結</button>
+    </div>
   </div>
 </div>
 

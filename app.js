@@ -1,5 +1,5 @@
 // 電影指南手機版：從轉接站下載電腦版整理好的資料包（推薦、時刻表、影城、票價、票房、影評），存在手機裡離線也能看
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastT;
@@ -18,6 +18,21 @@ const mapUrl = t => `https://maps.apple.com/?q=${encodeURIComponent(t.n)}&addres
 const S = (() => { try { return JSON.parse(localStorage.getItem('mg') || '{}'); } catch { return {}; } })();
 const saveS = () => { try { localStorage.setItem('mg', JSON.stringify(S)); } catch {} };
 S.pending ||= {};
+// ---------- 分享版（朋友用）：網址帶 ?s=分享碼&w=轉接站，打開就能用，只能看電影資料 ----------
+function readShareLink(href) {
+  try {
+    const u = new URL(href, location.href), key = u.searchParams.get('s'), host = u.searchParams.get('w');
+    if (!/^[a-z0-9]{8,20}$/.test(key || '') || !/^[\w.-]+\.[a-z]{2,}$/i.test(host || '')) return false;
+    if (S.token) return false;                      // 自己（擁有者）已經配對過，不要被分享連結蓋掉
+    S.guest = key; S.apiBase = `https://${host}`; saveS();
+    return true;
+  } catch { return false; }
+}
+readShareLink(location.href);
+const GUEST = () => !!S.guest && !S.token;
+const authHeader = () => GUEST() ? `Guest ${S.guest}` : `Bearer ${S.token}`;
+const linked = () => !!(S.token || S.guest);
+if (GUEST()) document.documentElement.classList.add('guest');
 // 個人資料：每筆有修改時間 at，合併時以較新的為準（電腦版 userdoc.js 同一套規則）
 const SECTIONS = ['favs', 'watched', 'theaters', 'people'];
 const emptyDoc = () => ({ favs: {}, watched: {}, theaters: {}, people: {} });
@@ -33,7 +48,7 @@ const onKeys = k => Object.entries(S.doc[k] || {}).filter(([, v]) => v.on).map((
 const watchedOf = id => S.doc.watched[id]?.on ? S.doc.watched[id] : null;
 function setUser(k, id, value) { S.doc[k][id] = { ...value, at: Date.now() }; saveS(); clearTimeout(setUser.t); setUser.t = setTimeout(syncUser, 800); }
 async function syncUser() {
-  if (!S.token) return;
+  if (!S.token) return;                               // 分享版的收藏、看過紀錄只存在自己手機
   try {
     for (let i = 0; i < 3; i++) {
       const remote = await api('GET', '/movie/user');
@@ -59,16 +74,19 @@ async function idbPut(k, v) { const d = await idb(); return new Promise((res, re
 
 let D = null;            // 資料包
 async function api(method, p, body) {
-  const r = await fetch(S.apiBase + p, { method, headers: { Authorization: `Bearer ${S.token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+  const r = await fetch(S.apiBase + p, { method, headers: { Authorization: authHeader(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401) { S.token = ''; saveS(); $('setup').hidden = false; throw new Error('通行碼失效，請重新配對'); }
+  if (r.status === 401) {
+    if (GUEST()) { S.guest = ''; saveS(); showSetup(); throw new Error(j.error || '分享連結已失效'); }
+    S.token = ''; saveS(); showSetup(); throw new Error('通行碼失效，請重新配對');
+  }
   if (!r.ok) throw new Error(j.error || `轉接站回應 ${r.status}`);
   return j;
 }
 // 先看 meta（很小），資料有更新才下載整包
 let syncing = false;
 async function sync(force = false) {
-  if (!S.token || syncing) return;
+  if (!linked() || syncing) return;
   syncing = true;
   syncUser().then(() => { if (D) render(); });
   try {
@@ -76,6 +94,8 @@ async function sync(force = false) {
     if (!meta.updatedAt) { if (!D) showEmpty('電腦版還沒有上傳資料。請確認電腦版「電影指南」有開著。'); return; }
     if (force || !D || meta.updatedAt !== D.generatedAt) {
       const snap = await api('GET', '/movie');
+      // 自己的個人推薦、年度報告分開放（分享版沒有）
+      if (!GUEST()) { try { const p = await api('GET', '/movie/private'); if (p.picks !== undefined) snap.picks = p.picks; if (p.reports) snap.reports = p.reports; } catch {} }
       D = snap;
       await idbPut('snap', snap).catch(() => {});
       for (const id of Object.keys(S.pending)) if (D.reviews[id] || (id.startsWith('recap:') && D.recaps?.[id.slice(6)])) delete S.pending[id];
@@ -93,6 +113,16 @@ async function sync(force = false) {
 function showEmpty(msg) { const e = $('emptyMsg'); e.textContent = msg; e.hidden = false; }
 
 // ---------- 配對 ----------
+function showSetup() { $('setup').hidden = false; $('suOwner').hidden = !!S.wantOwner ? false : true; }
+$('suPaste').addEventListener('click', async () => {
+  let t = $('suLink').value.trim();
+  if (!t) { try { t = await navigator.clipboard.readText(); $('suLink').value = t; } catch {} }
+  if (!t) return void ($('suMsg').textContent = '請把朋友傳給你的分享連結貼在上面');
+  if (!readShareLink(t)) return void ($('suMsg').textContent = '這不是有效的分享連結');
+  document.documentElement.classList.add('guest');
+  $('setup').hidden = true; toast('已開啟分享版'); sync(true);
+});
+$('suOwnerBtn').addEventListener('click', () => { $('suOwner').hidden = false; $('suOwnerBtn').hidden = true; });
 $('suGo').addEventListener('click', async () => {
   const url = $('suUrl').value.trim().replace(/\/+$/, ''), code = $('suCode').value.trim().toUpperCase();
   if (!/^https:\/\//.test(url)) return void ($('suMsg').textContent = '轉接站網址要以 https:// 開頭');
@@ -102,7 +132,8 @@ $('suGo').addEventListener('click', async () => {
     const r = await fetch(`${url}/pair/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || `回應 ${r.status}`);
-    S.apiBase = url; S.token = j.token; saveS();
+    S.apiBase = url; S.token = j.token; S.guest = ''; saveS();
+    document.documentElement.classList.remove('guest');
     $('setup').hidden = true; $('suCode').value = ''; $('suMsg').textContent = '';
     toast('已連結電腦版');
     sync(true);
@@ -304,6 +335,7 @@ function digestHtml() {
     <p class="muted small" style="margin:4px 0 0">AI 整理於 ${esc(d.at.slice(5, 16))}・每週四更新</p></div>`;
 }
 function picksHtml() {
+  if (GUEST()) return '';
   const p = D.picks, n = onKeys('watched').length;
   if (!p) return `<div class="panel tn-box"><h2 style="margin:0 0 6px">AI 為你推薦</h2><p class="muted small" style="margin:0">記錄 3 部以上看過的電影（電影頁按「✓ 看過了」並評分），AI 就會依你的口味推薦。目前 ${n} 部。${n >= 3 ? ' <a href="#" id="pkReq">請電腦版產生</a>' : ''}</p></div>`;
   return `<div class="panel tn-box"><h2 style="margin:0 0 4px">AI 為你推薦</h2><p class="muted small" style="margin:0 0 8px">${esc(p.taste || '')}</p>
@@ -548,6 +580,14 @@ function renderMore() {
       await shareFile(blob, `${year}-觀影回顧.png`, `我的 ${year} 觀影回顧：看了 ${ws.length} 部電影！`);
     };
     el.querySelectorAll('[data-edit]').forEach(r => r.onclick = () => openWatched(r.dataset.edit));
+  } else if (GUEST()) {
+    el.innerHTML = `<div class="panel set">
+      <div class="r"><span>資料更新時間</span><span class="muted">${esc(D.generatedAt.slice(5, 16))}</span></div>
+      <div class="r"><span>版本</span><span class="muted small">分享版 ${APP_VERSION}</span></div>
+      <button class="btn" id="mSync">立即檢查更新</button>
+      <p class="muted small">這是朋友分享給你的電影指南：熱門推薦、上映時間、影城場次、票價、票房、影評整理都可以看。收藏、看過紀錄只存在你自己的手機。</p>
+      <p class="muted small">建議按 Safari 下方的「分享」→「加入主畫面」，之後從主畫面打開就像 App 一樣。</p></div>`;
+    $('mSync').onclick = async () => { await sync(true); toast('已是最新資料'); };
   } else {
     el.innerHTML = `<div class="panel set">
       <div class="r"><span>資料更新時間</span><span class="muted">${esc(D.generatedAt.slice(5, 16))}</span></div>
@@ -558,16 +598,42 @@ function renderMore() {
       <p class="muted small">資料由電腦版「電影指南」整理後上傳，電腦版開著時每分鐘檢查一次。手機上按「整理影評」，會請電腦版去做，整理好之後自動出現。</p>
       <p class="muted small">版本 ${APP_VERSION}</p></div>`;
     $('mSync').onclick = async () => { await sync(true); toast('已是最新資料'); };
-    $('mRepair').onclick = () => { $('suUrl').value = S.apiBase || ''; $('setup').hidden = false; };
+    $('mRepair').onclick = () => { $('suUrl').value = S.apiBase || ''; S.wantOwner = 1; showSetup(); };
+    el.insertAdjacentHTML('beforeend', `<h2>分享給朋友</h2><div class="panel set" id="shareBox"><p class="muted small">產生分享連結傳給朋友（Line、簡訊都可以），朋友點開就能用，不用輸入任何東西。分享版只能看電影資料：看不到你的收藏、看過紀錄、AI 個人推薦，也不能請電腦版整理影評（不會花你的 AI 費用）。不想讓某人用了就按「撤銷」。</p>
+      <div class="r"><input id="shName" placeholder="給誰（例如：小明）" maxlength="20" style="flex:1"><button class="btn" id="shAdd">產生連結</button></div><div id="shList"><p class="muted small">載入中…</p></div></div>`);
+    renderShares();
   }
 }
+const shareUrl = key => `${location.origin}${location.pathname.replace(/index\.html$/, '')}?s=${key}&w=${encodeURIComponent(S.apiBase.replace(/^https:\/\//, ''))}`;
+async function renderShares() {
+  const box = $('shList'); if (!box) return;
+  try {
+    const { guests } = await api('GET', '/movie/guests');
+    box.innerHTML = guests.length ? guests.map(g => `<div class="r"><span><b>${esc(g.name)}</b><br><span class="muted small">${esc(g.at)} 建立・${g.seen ? `最後使用 ${esc(g.seen.slice(5))}` : '還沒用過'}</span></span>
+      <span><button class="btn" data-shcopy="${esc(g.key)}" data-shname="${esc(g.name)}">傳送</button> <button class="btn" data-shdel="${esc(g.key)}">撤銷</button></span></div>`).join('') : '<p class="muted small">還沒有分享。</p>';
+  } catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message.includes('404') || e.message.includes('找不到') ? '轉接站還沒更新成新版，請重新部署 worker.js' : e.message)}</p>`; }
+}
+async function sendShare(key, name) {
+  const url = shareUrl(key), text = `${name}，這是我整理的電影指南：熱門推薦、${(D?.areas || []).map(a => a.name).join('、') || '附近'}的場次、票價、影評都在裡面。點開就能用，可以「加入主畫面」當 App 用。`;
+  try { if (navigator.share) { await navigator.share({ title: '電影指南', text, url }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('已複製分享連結，貼到 Line 傳給朋友'); } catch { prompt('複製這個連結傳給朋友', url); }
+}
+document.addEventListener('click', async e => {
+  if (e.target.id === 'shAdd') {
+    const name = $('shName').value.trim() || '朋友';
+    try { const g = await api('POST', '/movie/guests', { name }); $('shName').value = ''; await renderShares(); sendShare(g.key, g.name); } catch (err) { toast(err.message); }
+  }
+  const c = e.target.closest('[data-shcopy]'); if (c) sendShare(c.dataset.shcopy, c.dataset.shname);
+  const d = e.target.closest('[data-shdel]');
+  if (d && confirm('撤銷後，這個連結就不能再用了。確定嗎？')) { try { await api('DELETE', `/movie/guests?key=${d.dataset.shdel}`); renderShares(); toast('已撤銷'); } catch (err) { toast(err.message); } }
+});
 $('moreSeg').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { more = b.dataset.m; renderMore(); } });
 
 function yearHtml(year, ws, spend, avg) {
   if (!ws.length) return '';
   const r = D.reports?.[year];
   return `<h2>${year} 年度報告</h2>${r ? `<details class="panel"><summary>AI 年度觀影報告（${r.n} 部・${esc(String(r.at).slice(0, 10))}）</summary><div class="md">${md(r.c)}</div></details>` : ''}
-    <div class="acts" style="margin-top:8px"><a href="#" class="btn" id="yrReq">${r ? '重新產生' : '請電腦版產生'} AI 年度報告</a><button class="btn" id="yrImg">分享年度回顧圖</button></div>`;
+    <div class="acts" style="margin-top:8px">${GUEST() ? '' : `<a href="#" class="btn" id="yrReq">${r ? '重新產生' : '請電腦版產生'} AI 年度報告</a>`}<button class="btn" id="yrImg">分享年度回顧圖</button></div>`;
 }
 const personBtn = n => `<button class="person ${isOn('people', n) ? 'on' : ''}" data-person="${esc(n)}">${isOn('people', n) ? '★ ' : ''}${esc(n)}</button>`;
 // 同一天最便宜的場次：中午前有早場價用早場價，否則全票；特殊廳不算；只算查過票價的影城
@@ -623,7 +689,7 @@ function openMovie(id, keepScroll = false) {
         ${m.ptt.top.map(([t, u, , n]) => `<a class="pttpost" href="${esc(u)}" target="_blank" rel="noopener"><span class="muted">${esc(n || '0')}</span> ${esc(t)}</a>`).join('')}<p class="muted small">「雷」文可能透露劇情。</p>` : ''}
       ${m.col ? `<h2>系列前作 <span class="muted small">${esc(m.col.n)}${m.col.total > 6 ? `・共 ${m.col.total} 部` : ''}</span></h2><div class="small">${m.col.p.map(([t, y]) => `${esc(t)}（${esc(y)}）`).join('、')}</div>
         ${D.recaps[id] ? `<details class="panel" style="margin-top:8px"><summary>前作懶人包（含前作劇透）</summary><div class="md">${md(D.recaps[id].c)}</div></details>`
-          : S.pending[`recap:${id}`] ? '<p class="muted small">已請電腦版整理前作懶人包，1～2 分鐘後重新打開。</p>' : '<p><button class="btn" id="recapReq">請電腦版整理前作懶人包</button></p>'}` : ''}
+          : S.pending[`recap:${id}`] ? '<p class="muted small">已請電腦版整理前作懶人包，1～2 分鐘後重新打開。</p>' : GUEST() ? '' : '<p><button class="btn" id="recapReq">請電腦版整理前作懶人包</button></p>'}` : ''}
       <h2>YouTube 影評 AI 整理</h2><div class="aibox" id="aiBox"></div>
       <h2>劇情簡介</h2><div class="story">${esc(m.st || '（沒有簡介）')}</div>
       ${m.dir?.length ? `<p class="small"><span class="muted">導演</span>　${m.dir.map(personBtn).join('')}</p>` : ''}
@@ -678,6 +744,7 @@ function renderReview() {
   const pend = S.pending[cur];
   box.innerHTML = pend
     ? `<p class="muted small" style="margin:0">已請電腦版整理（${esc(pend.slice(5, 16))}）。電腦版開著的話，大約 5～10 分鐘後會自動出現在這裡。</p>`
+    : GUEST() ? '<p class="muted small" style="margin:0">這部電影還沒有影評整理。</p>'
     : `<p class="muted small" style="margin-top:0">找 YouTube 上最多人看的影評影片，讓 AI 看完整理成「大家怎麼說」（不劇透）。會請電腦版去做，電腦版要開著。</p><button class="primary" id="aiGo">請電腦版整理影評</button>`;
   if ($('aiGo')) $('aiGo').onclick = async () => {
     try { await api('POST', '/movie/request', { type: 'review', id: cur }); S.pending[cur] = new Date().toLocaleString('sv-SE'); saveS(); renderReview(); toast('已送出'); }
@@ -706,9 +773,9 @@ function md(src) {
 (async () => {
   D = await idbGet('snap').catch(() => null);
   $('loading').hidden = true;
-  if (!S.token) { $('setup').hidden = false; }
+  if (!linked()) showSetup();
   go(tab);
-  if (!D) showEmpty(S.token ? '下載資料中…' : '請先連結電腦版');
+  if (!D) showEmpty(linked() ? '下載資料中…' : '請先打開分享連結');
   sync();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); if (D) render(); } });
   setInterval(() => { if (!document.hidden) sync(); }, 5 * 60e3);
