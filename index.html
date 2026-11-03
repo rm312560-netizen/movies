@@ -38,6 +38,15 @@
     <div id="tList"></div>
   </section>
 
+  <!-- 影城場次：每間影城每部片接下來最近的場次 -->
+  <section id="v-nearest" class="view" hidden>
+    <div class="filters">
+      <input id="nQ" placeholder="找電影" style="flex:1;min-width:0">
+      <label class="small"><input type="checkbox" id="nFav"> 只看常去影城</label>
+    </div>
+    <div id="nList"></div>
+  </section>
+
   <!-- 影城 -->
   <section id="v-theaters" class="view" hidden>
     <div id="thList"></div>
@@ -65,6 +74,7 @@
 <nav class="tabbar">
   <button data-tab="rec" aria-current="page"><span class="ic">★</span><span>推薦</span></button>
   <button data-tab="times"><span class="ic">◷</span><span>時刻</span></button>
+  <button data-tab="nearest"><span class="ic">▶</span><span>場次</span></button>
   <button data-tab="theaters"><span class="ic">⌂</span><span>影城</span></button>
   <button data-tab="box"><span class="ic">▤</span><span>票房</span></button>
   <button data-tab="more"><span class="ic">≡</span><span>更多</span></button>

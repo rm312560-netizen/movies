@@ -23,7 +23,7 @@ h2 { font-size: 1.05rem; margin: 20px 0 10px; }
 main { padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 80px); max-width: 640px; margin: 0 auto; }
 .offline { background: #2a2310; color: #f3dc9b; font-size: .8rem; padding: 6px 14px; text-align: center; }
 
-.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(5, 1fr);
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(6, 1fr);
   background: rgba(24,27,34,.97); border-top: 1px solid var(--line); padding: 6px 4px calc(env(safe-area-inset-bottom, 0px) + 6px); }
 .tabbar button { border: 0; background: none; display: grid; justify-items: center; gap: 1px; font-size: .7rem; color: var(--muted); padding: 3px 0; }
 .tabbar .ic { font-size: 1.2rem; line-height: 1.2; }
@@ -232,3 +232,15 @@ details.panel summary { cursor: pointer; color: var(--accent); }
 .food .ok { color: var(--good); margin-right: 6px; } .food .no { color: var(--muted); margin-right: 6px; text-decoration: line-through; }
 #dlg2Box { max-height: 88vh; overflow-y: auto; }
 .spark { flex: none; }
+
+/* 影城場次 */
+.nth { background: var(--panel); border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; }
+.nth .name { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; font-size: .95rem; }
+.nth .tmr { color: var(--accent); }
+.nrow { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line, #262a33); margin-top: 6px; }
+.nrow img { width: 40px; height: 58px; object-fit: cover; border-radius: 5px; background: var(--panel2); }
+.nrow .nm { min-width: 0; } .nrow .tt { font-weight: 600; font-size: .92rem; line-height: 1.3; }
+.nrow .more { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; } .nrow .more .time { font-size: .76rem; padding: 1px 6px; }
+.nrow .nt { text-align: right; display: grid; justify-items: end; gap: 2px; }
+.nrow .nt .time { font-size: 1.05rem; font-weight: 800; }
+.nrow .nt.hot .time { background: var(--accent); color: var(--accent-fg); }

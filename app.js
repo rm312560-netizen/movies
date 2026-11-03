@@ -1,5 +1,5 @@
 // 電影指南手機版：從轉接站下載電腦版整理好的資料包（推薦、時刻表、影城、票價、票房、影評），存在手機裡離線也能看
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastT;
@@ -389,7 +389,7 @@ function render() {
   if (!D) return;
   $('emptyMsg').hidden = true;
   renderAreaSeg();
-  ({ rec: renderRec, times: renderTimes, theaters: renderTheaters, box: renderBox, more: renderMore })[tab]();
+  ({ rec: renderRec, times: renderTimes, nearest: renderNearest, theaters: renderTheaters, box: renderBox, more: renderMore })[tab]();
 }
 
 // ---------- 推薦 ----------
@@ -454,6 +454,45 @@ $('tFrom').addEventListener('change', e => { tFrom = e.target.value; renderTimes
 $('tNow').addEventListener('click', () => { tFrom = nowHM(); renderTimes(); });
 $('tMovie').addEventListener('change', e => { tMovie = e.target.value; renderTimes(); });
 $('tFavTh').addEventListener('change', e => { S.onlyFavTh = e.target.checked; saveS(); renderTimes(); });
+
+// ---------- 影城場次：每間影城現在有什麼片（每部片接下來最近的場次，今天沒有了就列明天） ----------
+let nearT = null;
+const hmKey = t => t < '05:00' ? `2${t}` : `1${t}`;
+const minsUntil = t => { const [h, m] = t.split(':').map(Number), d = new Date(); return (h < 5 ? h + 24 : h) * 60 + m - ((d.getHours() < 5 ? d.getHours() + 24 : d.getHours()) * 60 + d.getMinutes()); };
+const soonTxt = m => m <= 0 ? '即將開演' : m < 60 ? `${m} 分後` : `${Math.floor(m / 60)} 小時 ${m % 60} 分後`;
+function renderNearest() {
+  clearTimeout(nearT);
+  const th = theaterMap(), today = ymd(), tomorrow = addDays(today, 1), from = hmKey(nowHM());
+  const q = (S.nQ || '').trim().toLowerCase(), by = new Map();
+  $('nFav').checked = !!S.nFav;
+  if (document.activeElement?.id !== 'nQ') $('nQ').value = S.nQ || '';
+  for (const date of [today, tomorrow]) for (const [tid, mid, ver, ...times] of D.shows[date] || []) {
+    const t = th[tid], m = M(mid);
+    if (!t || !m || !inArea(t) || (S.nFav && !isOn('theaters', tid)) || (q && !m.t.toLowerCase().includes(q))) continue;
+    const left = times.filter(x => date !== today || hmKey(x) >= from).sort((a, b) => hmKey(a).localeCompare(hmKey(b)));
+    if (!left.length) continue;
+    let g = by.get(tid);
+    if (!g) by.set(tid, g = { t, date, movies: [] });
+    if (g.date !== date) continue;   // 今天還有場次的影城，就不混進明天的
+    g.movies.push({ mid, m, ver, times: left.slice(0, 3) });
+  }
+  const list = [...by.values()].map(g => ({ ...g, movies: g.movies.sort((a, b) => hmKey(a.times[0]).localeCompare(hmKey(b.times[0])) || a.m.t.localeCompare(b.m.t)) }))
+    .sort((a, b) => isOn('theaters', b.t.id) - isOn('theaters', a.t.id) || a.date.localeCompare(b.date) || hmKey(a.movies[0].times[0]).localeCompare(hmKey(b.movies[0].times[0])));
+  $('nList').innerHTML = (list.length ? `<p class="muted small" style="margin:0 0 8px">現在 ${nowHM()}・每部片接下來最近的場次，點時間可加入行事曆或訂票</p>` : '') + list.map(({ t, date, movies }) => `<div class="nth">
+    <div class="name"><span>${isOn('theaters', t.id) ? '★ ' : ''}${esc(t.n)}</span><span class="small">${t.book ? `<a href="${esc(t.book)}" target="_blank" rel="noopener">訂票</a>　` : ''}<a href="${mapUrl(t)}" target="_blank" rel="noopener">地圖</a></span></div>
+    <div class="muted small">${esc(D.areas.find(a => a.id === t.a)?.name || '')}・${movies.length} 部片${date !== today ? '・<b class="tmr">今天已無場次，以下是明天</b>' : ''}</div>
+    ${movies.map(({ mid, m, ver, times }) => { const mins = date === today ? minsUntil(times[0]) : null; return `<div class="nrow" data-movie="${esc(mid)}">${img(thumb(m.p))}
+      <div class="nm"><div class="tt">${esc(m.t)}${ver ? `<span class="ver">${esc(ver)}</span>` : ''}</div>
+        <div class="muted small">${m.rt ? `${m.rt} 分・${endTime(times[0], m.rt)} 散場` : ''}</div>
+        ${times.length > 1 ? `<div class="more">${times.slice(1).map(x => timeBtn({ m: mid, title: m.t, d: date, t: x, th: t.id, v: ver, rt: m.rt })).join('')}</div>` : ''}</div>
+      <div class="nt ${mins != null && mins <= 30 ? 'hot' : ''}">${timeBtn({ m: mid, title: m.t, d: date, t: times[0], th: t.id, v: ver, rt: m.rt })}<div class="muted small">${mins == null ? '明天' : soonTxt(mins)}</div></div></div>`; }).join('')}
+  </div>`).join('') || '<div class="empty">沒有符合的場次（資料可能太舊，請打開電腦版更新）</div>';
+  // 停在這一頁時每分鐘更新倒數
+  nearT = setTimeout(() => { if (tab === 'nearest' && !document.hidden) renderNearest(); }, 60e3);
+}
+$('nQ').addEventListener('input', e => { S.nQ = e.target.value; saveS(); clearTimeout(renderNearest.t); renderNearest.t = setTimeout(renderNearest, 300); });
+$('nFav').addEventListener('change', e => { S.nFav = e.target.checked; saveS(); renderNearest(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && D && tab === 'nearest') renderNearest(); });
 
 // ---------- 影城 ----------
 let thOpen = null, thDate = null;
